@@ -1,12 +1,9 @@
-import express from 'express';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import pg from 'pg';
+import 'dotenv/config';
 
-const app = express();
-const PORT = 3000;
-
-app.get("/", (req, res) => {
-  res.send("Hello from Express using TypeScript!");
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
 });
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+export const db = drizzle(pool);
