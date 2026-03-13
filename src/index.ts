@@ -1,11 +1,24 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
-import pg from 'pg';
-import 'dotenv/config';
-if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is not set');
-}
-const pool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL,
+import express from "express";
+import subjectsRouter from "./router/subject";
+import cors from "cors";
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true,
+}));
+app.use("/api/subjects", subjectsRouter);
+
+app.get("/", (req, res) => {
+  res.send("Welcome to the Classroom API");
 });
 
-export const db = drizzle(pool);
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
+export default app;
