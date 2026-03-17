@@ -1,6 +1,7 @@
 import express from "express";
 import { eq, ilike, or, and, desc, sql, getTableColumns } from "drizzle-orm";
 
+import { requireAuth, requireRole } from "../middleware/auth";
 import { db } from "../db/index";
 import { classes, departments, enrollments, subjects } from "../db/schema/index";
 import { user } from "../db/schema/auth";
@@ -79,7 +80,11 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post(
+  "/",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
   try {
     const { departmentId, name, code, description } = req.body;
 
@@ -136,9 +141,9 @@ router.post("/", async (req, res) => {
 // Get subject details with counts
 router.get("/:id", async (req, res) => {
   try {
-    const subjectId = Number(req.params.id);
+    const subjectId = Number.parseInt(String(req.params.id), 10);
 
-    if (!Number.isFinite(subjectId)) {
+    if (!Number.isInteger(subjectId) || subjectId <= 0) {
       return res.status(400).json({ error: "Invalid subject id" });
     }
 
@@ -158,7 +163,7 @@ router.get("/:id", async (req, res) => {
     }
 
     const classesCount = await db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
       .from(classes)
       .where(eq(classes.subjectId, subjectId));
 
@@ -179,10 +184,10 @@ router.get("/:id", async (req, res) => {
 // List classes in a subject with pagination
 router.get("/:id/classes", async (req, res) => {
   try {
-    const subjectId = Number(req.params.id);
+    const subjectId = Number.parseInt(String(req.params.id), 10);
     const { page = "1", limit = "10" } = req.query;
 
-    if (!Number.isFinite(subjectId)) {
+    if (!Number.isInteger(subjectId) || subjectId <= 0) {
       return res.status(400).json({ error: "Invalid subject id" });
     }
 
@@ -197,7 +202,7 @@ router.get("/:id/classes", async (req, res) => {
     const offset = (currentPage - 1) * limitPerPage;
 
     const countResult = await db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
       .from(classes)
       .where(eq(classes.subjectId, subjectId));
 
@@ -233,12 +238,16 @@ router.get("/:id/classes", async (req, res) => {
 });
 
 // List users in a subject by role with pagination
-router.get("/:id/users", async (req, res) => {
+router.get(
+  "/:id/users",
+  requireAuth,
+  requireRole("admin"),
+  async (req, res) => {
   try {
-    const subjectId = Number(req.params.id);
+    const subjectId = Number.parseInt(String(req.params.id), 10);
     const { role, page = "1", limit = "10" } = req.query;
 
-    if (!Number.isFinite(subjectId)) {
+    if (!Number.isInteger(subjectId) || subjectId <= 0) {
       return res.status(400).json({ error: "Invalid subject id" });
     }
 
@@ -283,12 +292,12 @@ router.get("/:id/users", async (req, res) => {
     const countResult =
       role === "teacher"
         ? await db
-            .select({ count: sql<number>`count(distinct ${user.id})` })
+            .select({ count: sql<number>`count(distinct ${user.id})`.mapWith(Number) })
             .from(user)
             .leftJoin(classes, eq(user.id, classes.teacherId))
             .where(and(eq(user.role, role), eq(classes.subjectId, subjectId)))
         : await db
-            .select({ count: sql<number>`count(distinct ${user.id})` })
+            .select({ count: sql<number>`count(distinct ${user.id})`.mapWith(Number) })
             .from(user)
             .leftJoin(enrollments, eq(user.id, enrollments.studentId))
             .leftJoin(classes, eq(enrollments.classId, classes.id))
