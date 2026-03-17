@@ -10,10 +10,16 @@ const router = express.Router();
 // Get all subjects with optional search, department filter, and pagination
 router.get("/", async (req, res) => {
   try {
-    const { search, department, page = 1, limit = 10 } = req.query;
+    const { search, department, page = "1", limit = "10" } = req.query;
 
-    const currentPage = Math.max(1, +page);
-    const limitPerPage = Math.max(1, +limit);
+    const parsedPage = Number.parseInt(String(page), 10);
+    const parsedLimit = Number.parseInt(String(limit), 10);
+
+    const currentPage = Math.max(1, Number.isFinite(parsedPage) ? parsedPage : 1);
+    const limitPerPage = Math.min(
+      100,
+      Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 10)
+    );
     const offset = (currentPage - 1) * limitPerPage;
 
     const filterConditions = [];
@@ -36,7 +42,7 @@ router.get("/", async (req, res) => {
 
     // Count query MUST include the join
     const countResult = await db
-      .select({ count: sql<number>`count(*)` })
+      .select({ count: sql<number>`count(*)`.mapWith(Number) })
       .from(subjects)
       .leftJoin(departments, eq(subjects.departmentId, departments.id))
       .where(whereClause);
@@ -77,16 +83,52 @@ router.post("/", async (req, res) => {
   try {
     const { departmentId, name, code, description } = req.body;
 
+    const parsedDepartmentId = Number(departmentId);
+
+    if (!Number.isFinite(parsedDepartmentId) || parsedDepartmentId <= 0) {
+      return res.status(400).json({ error: "departmentId is required and must be a positive number" });
+    }
+
+    if (typeof name !== "string" || !name.trim()) {
+      return res.status(400).json({ error: "name is required" });
+    }
+
+    if (typeof code !== "string" || !code.trim()) {
+      return res.status(400).json({ error: "code is required" });
+    }
+
     const [createdSubject] = await db
       .insert(subjects)
-      .values({ departmentId, name, code, description })
+      .values({
+        departmentId: parsedDepartmentId,
+        name: name.trim(),
+        code: code.trim(),
+        description: typeof description === "string" ? description.trim() : description,
+      })
       .returning({ id: subjects.id });
 
-    if (!createdSubject) throw Error;
+    if (!createdSubject) throw new Error("Insert failed");
 
     res.status(201).json({ data: createdSubject });
   } catch (error) {
     console.error("POST /subjects error:", error);
+
+    const err = error as any;
+
+    // PostgreSQL unique constraint violation
+    if (err?.code === "23505" || err?.constraint === "subjects_code_unique") {
+      return res.status(409).json({ error: "Subject code already exists" });
+    }
+
+    // PostgreSQL foreign key violation
+    if (err?.code === "23503" || err?.constraint === "subjects_department_id_departments_id_fk") {
+      return res.status(400).json({ error: "Invalid departmentId" });
+    }
+
+    if (err?.constraint) {
+      return res.status(400).json({ error: `Constraint failed: ${err.constraint}` });
+    }
+
     res.status(500).json({ error: "Failed to create subject" });
   }
 });
@@ -138,14 +180,20 @@ router.get("/:id", async (req, res) => {
 router.get("/:id/classes", async (req, res) => {
   try {
     const subjectId = Number(req.params.id);
-    const { page = 1, limit = 10 } = req.query;
+    const { page = "1", limit = "10" } = req.query;
 
     if (!Number.isFinite(subjectId)) {
       return res.status(400).json({ error: "Invalid subject id" });
     }
 
-    const currentPage = Math.max(1, +page);
-    const limitPerPage = Math.max(1, +limit);
+    const parsedPage = Number.parseInt(String(page), 10);
+    const parsedLimit = Number.parseInt(String(limit), 10);
+
+    const currentPage = Math.max(1, Number.isFinite(parsedPage) ? parsedPage : 1);
+    const limitPerPage = Math.min(
+      100,
+      Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 10)
+    );
     const offset = (currentPage - 1) * limitPerPage;
 
     const countResult = await db
@@ -188,7 +236,7 @@ router.get("/:id/classes", async (req, res) => {
 router.get("/:id/users", async (req, res) => {
   try {
     const subjectId = Number(req.params.id);
-    const { role, page = 1, limit = 10 } = req.query;
+    const { role, page = "1", limit = "10" } = req.query;
 
     if (!Number.isFinite(subjectId)) {
       return res.status(400).json({ error: "Invalid subject id" });
@@ -198,8 +246,14 @@ router.get("/:id/users", async (req, res) => {
       return res.status(400).json({ error: "Invalid role" });
     }
 
-    const currentPage = Math.max(1, +page);
-    const limitPerPage = Math.max(1, +limit);
+    const parsedPage = Number.parseInt(String(page), 10);
+    const parsedLimit = Number.parseInt(String(limit), 10);
+
+    const currentPage = Math.max(1, Number.isFinite(parsedPage) ? parsedPage : 1);
+    const limitPerPage = Math.min(
+      100,
+      Math.max(1, Number.isFinite(parsedLimit) ? parsedLimit : 10)
+    );
     const offset = (currentPage - 1) * limitPerPage;
 
     const baseSelect = {

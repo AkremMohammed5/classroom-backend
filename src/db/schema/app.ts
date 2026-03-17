@@ -8,9 +8,18 @@ import {
   text,
   timestamp,
   varchar,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth";
-import { Scheduler } from "timers/promises";
+
+export type Schedule = {
+  // ISO 8601 date/time strings or similarly serializable values;
+  // adjust fields to match your domain as needed.
+  day: string;
+  startTime: string;
+  endTime: string;
+  location?: string;
+};
 
 const timestamps = {
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -68,7 +77,7 @@ export const classes = pgTable(
     capacity: integer("capacity").notNull().default(50),
     description: text("description"),
     status: classStatusEnum("status").notNull().default("active"),
-    schedules: jsonb("schedules").$type<Scheduler[]>().notNull(),
+    schedules: jsonb("schedules").$type<Schedule[]>().notNull(),
 
     ...timestamps,
   },
@@ -95,7 +104,7 @@ export const enrollments = pgTable(
   (table) => ({
     studentIdIdx: index("enrollments_student_id_idx").on(table.studentId),
     classIdIdx: index("enrollments_class_id_idx").on(table.classId),
-    studentClassUnique: index("enrollments_student_class_unique").on(
+    studentClassUnique: uniqueIndex("enrollments_student_class_unique").on(
       table.studentId,
       table.classId
     ),
